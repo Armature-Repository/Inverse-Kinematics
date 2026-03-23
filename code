@@ -1,0 +1,132 @@
+import pygame as pg
+import math
+
+WIDTH = 1600
+HEIGHT = 900
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+
+class Arm:
+    def __init__(self, location, length, angle, connection, color):
+        self.length = length
+        self.angle = angle
+        self.target_angle = angle
+        self.connection = connection
+        self.color = color
+        
+        if connection:
+            self.location = connection.end
+        else:
+            self.location = location
+            
+        self.end = self.end_calc()
+
+    def update_location(self):
+        if self.connection:
+            self.location = self.connection.end
+        self.end = self.end_calc()
+        
+    def end_calc(self):
+        radians = math.radians(self.angle)
+        x = self.location[0] + self.length * math.cos(radians)
+        y = self.location[1] + self.length * math.sin(radians)
+        return (x, y)  # No rounding yet
+
+    def center_calc(self):
+        radians = math.radians(self.angle)
+        x = self.location[0] + self.length * math.cos(radians) / 2
+        y = self.location[1] + self.length * math.sin(radians) / 2
+        return (-x, y)
+
+    def animate_angle(self, step=1):
+        if abs(self.angle - self.target_angle) <= step:
+            self.angle = self.target_angle
+        elif self.angle < self.target_angle:
+            self.angle += step
+        else:
+            self.angle -= step
+
+
+    def draw(self):
+        self.update_location()
+
+        stroke = 20
+        arm_length_px = self.length * 20
+
+        # Horizontal base, rotated later
+        arm_surface = pg.Surface((arm_length_px, stroke), pg.SRCALPHA)
+        arm_surface.fill(self.color)
+
+        rotated_surface = pg.transform.rotate(arm_surface, -self.angle)
+        rotated_rect = rotated_surface.get_rect()
+
+        x, y = self.center_calc()
+        screen_x, screen_y = cart_to_screen(x, y)
+        rotated_rect.center = (screen_x, screen_y)
+
+        screen.blit(rotated_surface, rotated_rect)
+
+
+def cart_to_screen(x, y):
+    return (x * 20 + WIDTH // 2, -y * 20 + HEIGHT // 2)
+
+def inverse_kinematics(x, y):
+    a1 = Arm1.length
+    a2 = Arm2.length
+
+    r2 = x**2 + y**2
+    cos_q2 = (r2 - a1**2 - a2**2) / (2 * a1 * a2)
+
+    # Clamp cos_q2 to avoid math domain error
+    cos_q2 = max(min(cos_q2, 1), -1)
+    q2_rad = math.acos(cos_q2)
+    
+    sin_q2 = math.sin(q2_rad)
+
+    k1 = a1 + a2 * cos_q2
+    k2 = a2 * sin_q2
+
+    q1_rad = math.atan2(y, x) - math.atan2(k2, k1)
+
+    # Convert to degrees
+    Arm1.target_angle = math.degrees(q1_rad)
+    Arm2.target_angle = math.degrees(q1_rad + q2_rad)
+
+
+
+
+pg.init()
+screen = pg.display.set_mode((WIDTH, HEIGHT))
+pg.display.set_caption("Arm Drawing")
+clock = pg.time.Clock()
+
+# Arm hierarchy
+Arm1 = Arm((0, 0), 10, 45, None, (0, 0, 0))
+Arm2 = Arm((0, 0), 5, 120, Arm1, (100, 100, 100))
+Arms = [Arm1, Arm2]
+
+Running = True
+while Running:
+    for event in pg.event.get():
+        if event.type == pg.QUIT:
+            Running = False
+
+        if event.type == pg.MOUSEBUTTONDOWN:
+            mouse_x, mouse_y = event.pos
+            # Convert screen coordinates to cartesian
+            cart_x = -(mouse_x - WIDTH // 2) / 20
+            cart_y = -(mouse_y - HEIGHT // 2) / 20
+            
+            inverse_kinematics(cart_x, cart_y)
+
+
+    screen.fill(WHITE)
+
+    for arm in Arms:
+        arm.animate_angle(step=1)
+        arm.draw()
+
+    pg.display.flip()
+    clock.tick(60)
+
+pg.quit()
